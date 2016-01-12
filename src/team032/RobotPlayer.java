@@ -83,7 +83,7 @@ public class RobotPlayer {
           if (rc.isCoreReady()) {
             int typeRoll = rand.nextInt(100);
             RobotType typeToBuild = null;
-            if (typeRoll < 15) {
+            if (typeRoll < 10) {
               typeToBuild = RobotType.SCOUT;
             } else if (typeRoll < 35) {
               typeToBuild = RobotType.GUARD;
@@ -189,12 +189,16 @@ public class RobotPlayer {
                 // Check if weapon is ready
                 if (rc.isWeaponReady()) {
                   rc.attackLocation(enemiesWithinRange[rand.nextInt(enemiesWithinRange.length)].location);
+                  //Signal enemy found
+                  rc.broadcastSignal(myType.sensorRadiusSquared);
                 }
               } else if (zombiesWithinRange.length > 0) {
                 shouldAttack = true;
                 // Check if weapon is ready
                 if (rc.isWeaponReady()) {
                   rc.attackLocation(zombiesWithinRange[rand.nextInt(zombiesWithinRange.length)].location);
+                  //Signal enemy found
+                  rc.broadcastSignal(myType.sensorRadiusSquared);
                 }
               }
             }
@@ -243,6 +247,10 @@ public class RobotPlayer {
                   rc.broadcastSignal(myType.sensorRadiusSquared);
                 } else {
                   moveDir = enemies[0].location.directionTo(myLoc);
+                  if (myType == RobotType.SCOUT) {
+                    //Signal enemy found
+                    rc.broadcastMessageSignal(enemies[0].location.x,enemies[0].location.y,myType.sensorRadiusSquared);
+                  }
                 }
               }
 
