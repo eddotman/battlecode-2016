@@ -11,28 +11,64 @@ public class RobotPlayer {
     if (rc.isCoreReady()) {
       // If possible, move in this direction
       try {
-        if (rc.canMove(dir)) {
-            rc.move(dir);
-        } else if (rc.canMove(dir.rotateLeft())) {
-            rc.move(dir.rotateLeft());
-        } else if (rc.canMove(dir.rotateRight())) {
-            rc.move(dir.rotateRight());
-        } else if (rc.canMove(dir.rotateLeft().rotateLeft())) {
-            rc.move(dir.rotateLeft().rotateLeft());
-        } else if (rc.canMove(dir.rotateRight().rotateRight())) {
-            rc.move(dir.rotateRight().rotateRight());
+        Direction[] directions = {dir, dir.rotateLeft(), dir.rotateRight(), dir.rotateLeft().rotateLeft(), dir.rotateRight().rotateRight()};
+
+        for (int i = 0; i < directions.length; i++) {
+          if (rc.canMove(directions[i]) && rc.onTheMap(rc.getLocation().add(directions[i])) ) {
+            rc.move(directions[i]);
+            break;
+          } else {
+            if ( (rc.senseRubble(rc.getLocation().add(directions[i])) > GameConstants.RUBBLE_OBSTRUCTION_THRESH) && rc.onTheMap(rc.getLocation().add(directions[i]) ) ){
+              if (rc.isCoreReady()) {
+                rc.clearRubble(directions[i]);
+                break;
+              }
+            }
+          }
         }
       } catch (Exception e) {
         System.out.println(e.getMessage());
         e.printStackTrace();
       }
-
     }
+  }
+
+  //Scans for neturals to activate
+  public static MapLocation findNeutrals(MapLocation rLoc, RobotType rType, RobotController rc) {
+    RobotInfo[] neutrals = rc.senseNearbyRobots(rType.sensorRadiusSquared, Team.NEUTRAL);
+
+    if (neutrals.length > 0) {
+      //Do signaling
+      if (rc.isCoreReady()) {
+        if (rType == RobotType.SCOUT) {
+          try {
+            rc.broadcastMessageSignal(-2, -2, rType.sensorRadiusSquared);
+          } catch (Exception e) {
+            System.out.println(e.getMessage());
+            e.printStackTrace();
+          }
+        }
+      }
+      for (int i = 0; i < neutrals.length; i++) {
+        if (neutrals[i].location.isAdjacentTo(rLoc)) {
+          try {
+            if (rc.isCoreReady()) {
+              rc.activate(neutrals[i].location);
+            }
+          } catch (Exception e) {
+            System.out.println(e.getMessage());
+            e.printStackTrace();
+          }
+        }
+      }
+    }
+
+    return rLoc;
   }
 
   //Scans for nearby parts
   public static MapLocation findParts(MapLocation rLoc, RobotType rType, RobotController rc) {
-    int maxRad = (int)(rType.sensorRadiusSquared / 3.0);
+    int maxRad = (int)(rType.sensorRadiusSquared / 2.0);
     for (int i = -maxRad; i < maxRad; i++){
       for (int j = -maxRad; j < maxRad; j++){
         MapLocation loc = rLoc.add(i, j);
@@ -41,7 +77,7 @@ public class RobotPlayer {
             //Do signaling
             if (rc.isCoreReady()) {
               if (rType == RobotType.SCOUT) {
-                rc.broadcastMessageSignal(loc.x, loc.y, rType.sensorRadiusSquared);
+                rc.broadcastMessageSignal(-2, -2, rType.sensorRadiusSquared);
               }
             }
           } catch (Exception e) {
@@ -108,17 +144,20 @@ public class RobotPlayer {
               // Choose a direction to try to move in
               MapLocation partsLoc = findParts(myLoc, RobotType.ARCHON, rc);
               Direction partsDir = myLoc.directionTo(partsLoc);
+              MapLocation neutralLoc = findNeutrals(myLoc, RobotType.ARCHON, rc);
+              Direction neutralDir = myLoc.directionTo(neutralLoc);
               Direction moveDir = null;
               RobotInfo[] enemies = rc.senseHostileRobots(myLoc, myType.sensorRadiusSquared);
 
               if (enemies.length != 0) {
                 //Signal enemy found
-                //rc.broadcastMessageSignal(enemies[0].location.x, enemies[0].location.y, myType.sensorRadiusSquared);
-
+                rc.broadcastMessageSignal(enemies[0].location.x, enemies[0].location.y, myType.sensorRadiusSquared);
                 moveDir = enemies[0].location.directionTo(myLoc);
               } else {
                 if (partsLoc != myLoc) {
                   moveDir = partsDir;
+                } else if (neutralLoc != myLoc) {
+                  moveDir = neutralDir;
                 } else {
                   // Read signals for parts info...
                   Signal partSig = rc.readSignal();
@@ -126,30 +165,33 @@ public class RobotPlayer {
                   if (partSig != null) {
                     int[] msg = partSig.getMessage();
                     if (msg != null) { //ARCHON/SCOUT message
-                      MapLocation moveTo =  new MapLocation(msg[0], msg[1]);
-                      moveDir = myLoc.directionTo(moveTo);
+                      if (msg[0] == -2 && msg[1] == -2) { //PARTS or ACTIVATION message
+                        MapLocation moveTo =  partSig.getLocation();
+                        moveDir = myLoc.directionTo(moveTo);
+                      }
                     } else { //Other message
-                      moveDir = myLoc.directionTo(partSig.getLocation());
+                      //moveDir = myLoc.directionTo(partSig.getLocation());
                     }
                     rc.emptySignalQueue();
-                  } else {
-                    // Move Randomly
-                    moveDir = directions[rand.nextInt(8)];
-
                   }
                 }
               }
 
+              if (moveDir == null) {
+                // Move Randomly
+                moveDir = directions[rand.nextInt(8)];
+              }
+
               //Move
-              if (rc.canMove(moveDir)){
-                moveToLoc(moveDir, rc);
-              } else if (rc.senseRubble(myLoc.add(moveDir)) > GameConstants.RUBBLE_OBSTRUCTION_THRESH) {
+              if (rc.senseRubble(myLoc.add(moveDir)) > GameConstants.RUBBLE_OBSTRUCTION_THRESH){
                 if (rc.isCoreReady()) {
                   rc.clearRubble(moveDir);
                 }
+              } else {
+                moveToLoc(moveDir, rc);
               }
               //Signal disperse
-              rc.broadcastMessageSignal(-1, -1, (int)(myType.sensorRadiusSquared / 3));
+              rc.broadcastMessageSignal(-1, -1, (int)(myType.sensorRadiusSquared / 4.0));
             }
           }
 
@@ -258,15 +300,11 @@ public class RobotPlayer {
               if (moveDir == null) {
                 moveDir = directions[fate % 8];
               }
-              // Check the rubble in that direction
-              if (rc.senseRubble(rc.getLocation().add(moveDir)) >= GameConstants.RUBBLE_OBSTRUCTION_THRESH) {
-                // Too much rubble, so I should clear it
+              if (rc.senseRubble(myLoc.add(moveDir)) > GameConstants.RUBBLE_OBSTRUCTION_THRESH){
                 if (rc.isCoreReady()) {
                   rc.clearRubble(moveDir);
                 }
-                // Check if I can move in this direction
-              } else if (rc.canMove(moveDir)) {
-                // Move
+              } else {
                 moveToLoc(moveDir, rc);
               }
             }
