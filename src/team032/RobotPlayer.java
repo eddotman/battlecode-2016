@@ -83,7 +83,7 @@ public class RobotPlayer {
           if (rc.isCoreReady()) {
             int typeRoll = rand.nextInt(100);
             RobotType typeToBuild = null;
-            if (typeRoll < 10) {
+            if (typeRoll < 15) {
               typeToBuild = RobotType.SCOUT;
             } else if (typeRoll < 35) {
               typeToBuild = RobotType.GUARD;
@@ -227,7 +227,7 @@ public class RobotPlayer {
                 } else {
                   moveDir = myLoc.directionTo(moveSig.getLocation());
                   //Chain along the message
-                  rc.broadcastSignal(myType.sensorRadiusSquared);
+                  //rc.broadcastSignal(myType.sensorRadiusSquared);
                 }
                 rc.emptySignalQueue();
               }
