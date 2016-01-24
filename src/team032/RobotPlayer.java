@@ -9,14 +9,16 @@ public class RobotPlayer {
   //Repair allies
   public static void repairAllies(RobotController rc) {
     RobotInfo[] nearbots = rc.senseNearbyRobots(RobotType.ARCHON.sensorRadiusSquared, rc.getTeam());
-    double maxHealth = 9999;
+    double maxHealth = 9999.0;
     if (nearbots.length > 0) {
       RobotInfo healbot = null;
+      double healthPercent = 9999.0;
 
-      for (int i = 0; i < nearbots.length; i++) {
-        if (nearbots[i].health < maxHealth) {
-          healbot = nearbots[i];
-          maxHealth = healbot.health;
+      for (RobotInfo nearbot : nearbots) {
+
+        if (nearbot.health / nearbot.maxHealth < maxHealth) {
+          healbot = nearbot;
+          maxHealth = nearbot.health / nearbot.maxHealth;
         }
       }
 
@@ -24,8 +26,10 @@ public class RobotPlayer {
         MapLocation repairLoc = healbot.location;
 
         try {
+          rc.repair(repairLoc);
           if (rc.isWeaponReady()) {
-            rc.repair(repairLoc);
+            //System.out.println(healbot);
+            //rc.repair(repairLoc);
           }
         } catch (Exception e) {
           System.out.println(e.getMessage());
@@ -162,9 +166,11 @@ public class RobotPlayer {
         try {
           //Build order
           if (rc.isCoreReady()) {
+            repairAllies(rc);
+
             int typeRoll = rand.nextInt(100);
             RobotType typeToBuild = null;
-            if (typeRoll < 5) {
+            if (typeRoll < 10) {
               typeToBuild = RobotType.SCOUT;
             } else if (typeRoll < 50) {
               typeToBuild = RobotType.SOLDIER;
@@ -181,101 +187,101 @@ public class RobotPlayer {
             Direction archonDir = myLoc.directionTo(archonLoc);
             Direction moveDir = null;
             RobotInfo[] enemies = rc.senseHostileRobots(myLoc, myType.sensorRadiusSquared);
+            int dirToBuild = rand.nextInt(8);
 
-            repairAllies(rc);
 
-            if (enemies.length != 0) {
+
+            if (enemies.length != 0 && myLoc.distanceSquaredTo(archonLoc) > 4) {
               //Signal enemy found
-              rc.broadcastMessageSignal(enemies[nearestRobInd(enemies, myLoc)].location.x, enemies[nearestRobInd(enemies, myLoc)].location.y, myType.sensorRadiusSquared);
+              // rc.broadcastMessageSignal(enemies[nearestRobInd(enemies, myLoc)].location.x, enemies[nearestRobInd(enemies, myLoc)].location.y, myType.sensorRadiusSquared);
               moveDir = enemies[nearestRobInd(enemies, myLoc)].location.directionTo(myLoc);
             } else {
 
-              if (partsLoc != myLoc) {
+              if (archonLoc != myLoc && !myLoc.isAdjacentTo(archonLoc)) {
+                moveDir = archonDir;
+              } else if (partsLoc != myLoc) {
                 moveDir = partsDir;
               } else if (neutralLoc != myLoc) {
                 moveDir = neutralDir;
-              } else if (archonLoc != myLoc) {
-                if (typeRoll < 80) {
-                  moveDir = archonDir;
-                }
-              } else {
-                // Read signals for parts info...
-                Signal partSig = rc.readSignal();
-
-                if (partSig != null) {
-                  int[] msg = partSig.getMessage();
-                  if (msg != null) { //ARCHON/SCOUT message
-                    if (msg[0] == -2 && msg[1] == -2) { //PARTS or ACTIVATION message
-                      MapLocation moveTo =  partSig.getLocation();
-                      moveDir = myLoc.directionTo(moveTo);
-                    }
-                  } else { //Other message
-                    //moveDir = myLoc.directionTo(partSig.getLocation());
-                  }
-                  rc.emptySignalQueue();
-                }
               }
+              // else {
+              //   // Read signals for parts info...
+              //   Signal partSig = rc.readSignal();
+              //
+              //   if (partSig != null) {
+              //     int[] msg = partSig.getMessage();
+              //     if (msg != null) { //ARCHON/SCOUT message
+              //       if (msg[0] == -2 && msg[1] == -2) { //PARTS or ACTIVATION message
+              //         MapLocation moveTo =  partSig.getLocation();
+              //         moveDir = myLoc.directionTo(moveTo);
+              //       }
+              //     } else { //Other message
+              //       //moveDir = myLoc.directionTo(partSig.getLocation());
+              //     }
+              //     rc.emptySignalQueue();
+              //   }
+              // }
             }
 
             if (moveDir == null) {
               // Move Randomly
-              moveDir = directions[rand.nextInt(8)];
+              //moveDir = directions[rand.nextInt(8)];
             }
 
-            if (rc.isCoreReady() && myLoc.distanceSquaredTo(archonLoc) < myType.sensorRadiusSquared / 2 && rc.getTeamParts() > 130) {
+            if (rc.isCoreReady() && myLoc.distanceSquaredTo(archonLoc) < myType.sensorRadiusSquared / 5.0 && rc.getTeamParts() > 130) {
               if (rc.hasBuildRequirements(typeToBuild)) {
                 // Choose a random direction to try to build in
-                Direction[] dirsToBuild = {Direction.NORTH_EAST, Direction.SOUTH_EAST,
-                    Direction.SOUTH_WEST, Direction.NORTH_WEST};
-                for (Direction dirToBuild : dirsToBuild) {
-                  // If possible, build in this direction
-                  if (rc.canBuild(dirToBuild, typeToBuild)) {
+                //Direction[] dirsToBuild = {Direction.NORTH_EAST, Direction.SOUTH_EAST,
+                //    Direction.SOUTH_WEST, Direction.NORTH_WEST};
 
-                    if (typeToBuild == RobotType.TURRET) {
-                      MapLocation buildLoc = myLoc.add(dirToBuild);
-                      boolean okToBuild = false;
-                      RobotInfo nBot = rc.senseRobotAtLocation(buildLoc.add(Direction.NORTH));
-                      RobotInfo eBot = rc.senseRobotAtLocation(buildLoc.add(Direction.EAST));
-                      RobotInfo wBot = rc.senseRobotAtLocation(buildLoc.add(Direction.WEST));
-                      RobotInfo sBot = rc.senseRobotAtLocation(buildLoc.add(Direction.SOUTH));
-                      boolean nTurr = false;
-                      boolean eTurr = false;
-                      boolean wTurr = false;
-                      boolean sTurr = false;
-
-                      if (nBot != null) {nTurr = (nBot.type == RobotType.TURRET);}
-                      if (eBot != null) {eTurr = (eBot.type == RobotType.TURRET);}
-                      if (wBot != null) {wTurr = (wBot.type == RobotType.TURRET);}
-                      if (sBot != null) {sTurr = (sBot.type == RobotType.TURRET);}
-
-                      if (!nTurr && !eTurr && !wTurr && !sTurr) {
-                        rc.build(dirToBuild, typeToBuild);
-                      }
-
-                    } else {
-                      rc.build(dirToBuild, typeToBuild);
-                    }
-
-                    break;
-                  }
+                // If possible, build in this direction
+                if (rc.canBuild(directions[dirToBuild], typeToBuild)) {
+                  rc.build(directions[dirToBuild], typeToBuild);
+                  // if (typeToBuild == RobotType.TURRET) {
+                  //   MapLocation buildLoc = myLoc.add(dirToBuild);
+                  //   boolean okToBuild = false;
+                  //   RobotInfo nBot = rc.senseRobotAtLocation(buildLoc.add(Direction.NORTH));
+                  //   RobotInfo eBot = rc.senseRobotAtLocation(buildLoc.add(Direction.EAST));
+                  //   RobotInfo wBot = rc.senseRobotAtLocation(buildLoc.add(Direction.WEST));
+                  //   RobotInfo sBot = rc.senseRobotAtLocation(buildLoc.add(Direction.SOUTH));
+                  //   boolean nTurr = false;
+                  //   boolean eTurr = false;
+                  //   boolean wTurr = false;
+                  //   boolean sTurr = false;
+                  //
+                  //   if (nBot != null) {nTurr = (nBot.type == RobotType.TURRET);}
+                  //   if (eBot != null) {eTurr = (eBot.type == RobotType.TURRET);}
+                  //   if (wBot != null) {wTurr = (wBot.type == RobotType.TURRET);}
+                  //   if (sBot != null) {sTurr = (sBot.type == RobotType.TURRET);}
+                  //
+                  //   if (!nTurr && !eTurr && !wTurr && !sTurr) {
+                  //     rc.build(dirToBuild, typeToBuild);
+                  //   }
+                  //
+                  // } else {
+                  //   rc.build(dirToBuild, typeToBuild);
+                  // }
                 }
               }
             }
 
             //Move
             if (moveDir != null) {
-              if (rc.senseRubble(myLoc.add(moveDir)) > GameConstants.RUBBLE_OBSTRUCTION_THRESH){
+              if (rc.senseRubble(myLoc.add(moveDir)) >= GameConstants.RUBBLE_OBSTRUCTION_THRESH){
                 if (rc.isCoreReady()) {
                   rc.clearRubble(moveDir);
                 }
                 //Signal disperse
-                rc.broadcastMessageSignal(-1, -1, (int)(myType.sensorRadiusSquared / 4.0));
+                //rc.broadcastMessageSignal(-1, -1, (int)(myType.sensorRadiusSquared / 4.0));
               } else {
                 moveToLoc(moveDir, rc);
               }
             }
 
           }
+
+          //Signal disperse
+          //rc.broadcastMessageSignal(-1, -1, (int)(myType.sensorRadiusSquared / 4.0));
 
           Clock.yield();
         } catch (Exception e) {
@@ -307,9 +313,9 @@ public class RobotPlayer {
           boolean disperseMode = false;
           RobotInfo[] enemies = rc.senseHostileRobots(myLoc, myType.sensorRadiusSquared);
 
-          if (myType == RobotType.SCOUT && rc.isCoreReady() && !disperseMode) {
-            MapLocation partsLoc = findParts(myLoc, myType, rc);
-          }
+          // if (myType == RobotType.SCOUT && rc.isCoreReady() && !disperseMode) {
+          //   MapLocation partsLoc = findParts(myLoc, myType, rc);
+          // }
 
           if (enemies.length == 0) {
             //Read signal and move
@@ -325,20 +331,24 @@ public class RobotPlayer {
                   //System.out.println("DISPERSE!");
                 } else { //Move towards signal
                   MapLocation moveTo =  new MapLocation(msg[0], msg[1]);
-                  moveDir = myLoc.directionTo(moveTo);
+                  if (myType != RobotType.SCOUT) { moveDir = myLoc.directionTo(moveTo);}
                   //Chain along the message
                   //rc.broadcastSignal(myType.sensorRadiusSquared);
                 }
               } else {
-                moveDir = myLoc.directionTo(moveSig.getLocation());
+                if (myType != RobotType.SCOUT) { moveDir = myLoc.directionTo(moveSig.getLocation()); }
                 //Chain along the message
                 //rc.broadcastSignal(myType.sensorRadiusSquared);
               }
               rc.emptySignalQueue();
-            } else if (myType == RobotType.SCOUT) {
-              moveDir = archonLoc.directionTo(myLoc);
-            } else if (myType != RobotType.SCOUT){
-              if (myLoc.distanceSquaredTo(archonLoc) > (RobotType.ARCHON.sensorRadiusSquared * 1.5)) {
+            }
+            // else if (myType == RobotType.SCOUT) {
+            //   moveDir = archonLoc.directionTo(myLoc);
+            // }
+            else {
+              if (myType == RobotType.SCOUT && myLoc.distanceSquaredTo(archonLoc) > (RobotType.ARCHON.sensorRadiusSquared * 0.2)) {
+                moveDir = archonDir;
+              } if (myLoc.distanceSquaredTo(archonLoc) > (RobotType.ARCHON.sensorRadiusSquared * 0.4)) {
                 moveDir = archonDir;
               }
             }
@@ -363,7 +373,11 @@ public class RobotPlayer {
               moveDir = enemies[nearestRobInd(enemies, myLoc)].location.directionTo(myLoc);
               if (myType == RobotType.SCOUT) {
                 //Signal enemy found
-                rc.broadcastMessageSignal(enemies[nearestRobInd(enemies, myLoc)].location.x,enemies[nearestRobInd(enemies, myLoc)].location.y,myType.sensorRadiusSquared*100);
+                if (enemies[nearestRobInd(enemies, myLoc)].type == RobotType.ZOMBIEDEN) {
+                  rc.broadcastMessageSignal(enemies[nearestRobInd(enemies, myLoc)].location.x,enemies[nearestRobInd(enemies, myLoc)].location.y,myType.sensorRadiusSquared*5);
+                } else if (enemies[nearestRobInd(enemies, myLoc)].type != RobotType.TURRET) {
+                  rc.broadcastMessageSignal(enemies[nearestRobInd(enemies, myLoc)].location.x,enemies[nearestRobInd(enemies, myLoc)].location.y,myType.sensorRadiusSquared*3);
+                }
               }
             }
           }
@@ -403,9 +417,9 @@ public class RobotPlayer {
           if (!shouldAttack) {
             if (rc.isCoreReady()) {
               // Choose a random direction to try to move in
-              if (myType == RobotType.SCOUT) {
-               moveDir = archonLoc.directionTo(myLoc);
-              }
+              // if (myType == RobotType.SCOUT) {
+              //  moveDir = archonLoc.directionTo(myLoc);
+              // }
               if (moveDir == null) {
                 moveDir = directions[fate % 8];
               }
@@ -428,6 +442,8 @@ public class RobotPlayer {
         }
       }
     } else if (rc.getType() == RobotType.TURRET) {
+      boolean hasMoved = false;
+      boolean hasPacked = false;
       try {
         myAttackRange = rc.getType().attackRadiusSquared;
       } catch (Exception e) {
@@ -436,28 +452,70 @@ public class RobotPlayer {
       }
 
       while (true) {
+        myLoc = rc.getLocation();
+        int fate = rand.nextInt(1000);
+        boolean shouldAttack = false;
+        MapLocation archonLoc = rc.getInitialArchonLocations(myTeam)[0];
+        Direction revArchonDir = archonLoc.directionTo(myLoc);
+        //Direction moveDir = null;
+        //boolean disperseMode = false;
         // This is a loop to prevent the run() method from returning. Because of the Clock.yield()
         // at the end of it, the loop will iterate once per game round.
         try {
+
+          if (!hasPacked) {
+            rc.pack();
+            hasPacked = true;
+          }
+
+          if (!hasMoved) {
+            if (myLoc.distanceSquaredTo(archonLoc) < RobotType.ARCHON.attackRadiusSquared / 4.0) {
+              if (rc.isCoreReady()) {
+                if (rc.canMove(revArchonDir)) {
+                  rc.move(revArchonDir);
+                } else {
+                  rc.unpack();
+                  hasMoved = true;
+                }
+              }
+            } else {
+              rc.unpack();
+              hasMoved = true;
+            }
+
+          }
+
           // If this robot type can attack, check for enemies within range and attack one
           if (rc.isWeaponReady()) {
             RobotInfo[] enemiesWithinRange = rc.senseNearbyRobots(myAttackRange, enemyTeam);
             RobotInfo[] zombiesWithinRange = rc.senseNearbyRobots(myAttackRange, Team.ZOMBIE);
             if (enemiesWithinRange.length > 0) {
-              for (RobotInfo enemy : enemiesWithinRange) {
-                // Check whether the enemy is in a valid attack range (turrets have a minimum range)
-                if (rc.canAttackLocation(enemy.location)) {
-                  rc.attackLocation(enemy.location);
-                  break;
-                }
+              // Check whether the enemy is in a valid attack range (turrets have a minimum range)
+              if (rc.canAttackLocation(enemiesWithinRange[nearestRobInd(enemiesWithinRange, myLoc)].location)) {
+                if (rc.isWeaponReady()) { rc.attackLocation(enemiesWithinRange[nearestRobInd(enemiesWithinRange, myLoc)].location); }
               }
             } else if (zombiesWithinRange.length > 0) {
-              for (RobotInfo zombie : zombiesWithinRange) {
-                if (rc.canAttackLocation(zombie.location)) {
-                  rc.attackLocation(zombie.location);
-                  break;
+                if (rc.canAttackLocation(zombiesWithinRange[nearestRobInd(zombiesWithinRange, myLoc)].location)) {
+                  if (rc.isWeaponReady()) {
+                    rc.attackLocation(zombiesWithinRange[nearestRobInd(zombiesWithinRange, myLoc)].location);
+                  }
+                }
+            }
+          }
+
+          //Read signal and attack
+          Signal atkSig = rc.readSignal();
+          if (atkSig != null) {
+            int[] msg = atkSig.getMessage();
+            if (msg != null) {
+              if (msg[0] != -1 && msg[1] != -1) {
+                //Not disperse
+                MapLocation atkAt =  new MapLocation(msg[0], msg[1]);
+                if (rc.canAttackLocation(atkAt)) {
+                  if (rc.isWeaponReady()) { rc.attackLocation(atkAt); }
                 }
               }
+              rc.emptySignalQueue();
             }
           }
 
