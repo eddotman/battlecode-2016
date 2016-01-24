@@ -170,9 +170,9 @@ public class RobotPlayer {
 
             int typeRoll = rand.nextInt(100);
             RobotType typeToBuild = null;
-            if (typeRoll < 10) {
+            if (typeRoll < 5) {
               typeToBuild = RobotType.SCOUT;
-            } else if (typeRoll < 50) {
+            } else if (typeRoll < 45) {
               typeToBuild = RobotType.SOLDIER;
             } else {
               typeToBuild = RobotType.TURRET;
@@ -370,13 +370,13 @@ public class RobotPlayer {
               //Signal enemy found
               //rc.broadcastSignal(myType.sensorRadiusSquared / 2);
             } else {
-              moveDir = enemies[nearestRobInd(enemies, myLoc)].location.directionTo(myLoc);
+              //moveDir = enemies[nearestRobInd(enemies, myLoc)].location.directionTo(myLoc);
               if (myType == RobotType.SCOUT) {
                 //Signal enemy found
                 if (enemies[nearestRobInd(enemies, myLoc)].type == RobotType.ZOMBIEDEN) {
-                  rc.broadcastMessageSignal(enemies[nearestRobInd(enemies, myLoc)].location.x,enemies[nearestRobInd(enemies, myLoc)].location.y,myType.sensorRadiusSquared*5);
-                } else if (enemies[nearestRobInd(enemies, myLoc)].type != RobotType.TURRET) {
-                  rc.broadcastMessageSignal(enemies[nearestRobInd(enemies, myLoc)].location.x,enemies[nearestRobInd(enemies, myLoc)].location.y,myType.sensorRadiusSquared*3);
+                  rc.broadcastMessageSignal(enemies[nearestRobInd(enemies, myLoc)].location.x,enemies[nearestRobInd(enemies, myLoc)].location.y,myType.sensorRadiusSquared*1);
+                } else {
+                  rc.broadcastMessageSignal(enemies[nearestRobInd(enemies, myLoc)].location.x,enemies[nearestRobInd(enemies, myLoc)].location.y,myType.sensorRadiusSquared*1);
                 }
               }
             }
@@ -417,9 +417,9 @@ public class RobotPlayer {
           if (!shouldAttack) {
             if (rc.isCoreReady()) {
               // Choose a random direction to try to move in
-              // if (myType == RobotType.SCOUT) {
-              //  moveDir = archonLoc.directionTo(myLoc);
-              // }
+              if (myType == RobotType.SCOUT) {
+               moveDir = myLoc.directionTo(archonLoc);
+              }
               if (moveDir == null) {
                 moveDir = directions[fate % 8];
               }
@@ -469,14 +469,11 @@ public class RobotPlayer {
           }
 
           if (!hasMoved) {
-            if (myLoc.distanceSquaredTo(archonLoc) < RobotType.ARCHON.attackRadiusSquared / 4.0) {
+            if (myLoc.distanceSquaredTo(archonLoc) < RobotType.ARCHON.attackRadiusSquared / 6.0) {
               if (rc.isCoreReady()) {
-                if (rc.canMove(revArchonDir)) {
-                  rc.move(revArchonDir);
-                } else {
-                  rc.unpack();
-                  hasMoved = true;
-                }
+                moveToLoc(revArchonDir, rc);
+                rc.unpack();
+                hasMoved = true;
               }
             } else {
               rc.unpack();
@@ -485,22 +482,24 @@ public class RobotPlayer {
 
           }
 
+          RobotInfo[] enemiesWithinRange = rc.senseNearbyRobots(myAttackRange, enemyTeam);
+          RobotInfo[] zombiesWithinRange = rc.senseNearbyRobots(myAttackRange, Team.ZOMBIE);
           // If this robot type can attack, check for enemies within range and attack one
-          if (rc.isWeaponReady()) {
-            RobotInfo[] enemiesWithinRange = rc.senseNearbyRobots(myAttackRange, enemyTeam);
-            RobotInfo[] zombiesWithinRange = rc.senseNearbyRobots(myAttackRange, Team.ZOMBIE);
-            if (enemiesWithinRange.length > 0) {
-              // Check whether the enemy is in a valid attack range (turrets have a minimum range)
-              if (rc.canAttackLocation(enemiesWithinRange[nearestRobInd(enemiesWithinRange, myLoc)].location)) {
-                if (rc.isWeaponReady()) { rc.attackLocation(enemiesWithinRange[nearestRobInd(enemiesWithinRange, myLoc)].location); }
-              }
-            } else if (zombiesWithinRange.length > 0) {
-                if (rc.canAttackLocation(zombiesWithinRange[nearestRobInd(zombiesWithinRange, myLoc)].location)) {
-                  if (rc.isWeaponReady()) {
-                    rc.attackLocation(zombiesWithinRange[nearestRobInd(zombiesWithinRange, myLoc)].location);
+          if (enemiesWithinRange.length > 0) {
+              for (RobotInfo enemy : enemiesWithinRange) {
+                  // Check whether the enemy is in a valid attack range (turrets have a minimum range)
+                  if (rc.canAttackLocation(enemy.location)) {
+                      if (rc.isWeaponReady()) { rc.attackLocation(enemy.location); }
+                      break;
                   }
-                }
-            }
+              }
+          } else if (zombiesWithinRange.length > 0) {
+              for (RobotInfo zombie : zombiesWithinRange) {
+                  if (rc.canAttackLocation(zombie.location)) {
+                      if (rc.isWeaponReady()) { rc.attackLocation(zombie.location); }
+                      break;
+                  }
+              }
           }
 
           //Read signal and attack
@@ -517,6 +516,11 @@ public class RobotPlayer {
               }
               rc.emptySignalQueue();
             }
+          }
+
+          if (fate < 10 && hasMoved && hasPacked && enemiesWithinRange.length == 0 && zombiesWithinRange.length == 0) {
+            hasMoved = false;
+            hasPacked = false;
           }
 
           Clock.yield();
